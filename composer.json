@@ -1,0 +1,83 @@
+{
+    "name": "guggach/laravel-reports",
+    "description": "Banded, print-ready reports for Laravel: layouts, filters, presets and HTML/PDF output. Work in progress - not usable yet.",
+    "keywords": [
+        "guggach",
+        "laravel",
+        "reports",
+        "pdf",
+        "print",
+        "layouts"
+    ],
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Enrica",
+            "email": "e.ruedin@guggach.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "illuminate/contracts": "^11.0||^12.0||^13.0",
+        "illuminate/database": "^11.0||^12.0||^13.0",
+        "illuminate/support": "^11.0||^12.0||^13.0",
+        "illuminate/view": "^11.0||^12.0||^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.24",
+        "orchestra/testbench": "^9.0||^10.0||^11.0",
+        "pestphp/pest": "^3.8||^5.0",
+        "pestphp/pest-plugin-laravel": "^3.0||^5.0",
+        "phpstan/phpstan": "^2.0",
+        "rector/rector": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Guggach\\Reports\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Guggach\\Reports\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "lint": [
+            "pint --parallel",
+            "rector"
+        ],
+        "test:lint": [
+            "pint --parallel --test",
+            "rector --dry-run"
+        ],
+        "test:types": "phpstan analyse",
+        "test:unit": "pest",
+        "test": [
+            "@test:lint",
+            "@test:types",
+            "@test:unit"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Guggach\\Reports\\ReportsServiceProvider"
+            ],
+            "aliases": {
+                "Reports": "Guggach\\Reports\\Facades\\Reports"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "preferred-install": "dist",
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

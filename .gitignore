@@ -1,0 +1,10 @@
+/.phpunit.cache/
+/.phpunit.result.cache
+/build/
+/composer.lock
+/phpunit.xml
+/phpstan.neon
+/vendor/
+/.idea/
+*.swp
+*.swo
