@@ -362,6 +362,23 @@ $r->layout(CompanyLayout::class);
 
 Felder werden **feldweise** zusammengeführt (der Report muss nur die abweichenden Werte setzen); ohne Override bleibt der eingestellte Default. Analog gilt der Modus-Default `reports.default_mode` (Flow/Strict) als Fallback, sofern der Report nichts setzt.
 
+**Renderer-Verhalten (v1, implementiert).** Der `HtmlRenderer` löst das Layout wie folgt auf: `Report::layout()` gewinnt über den Builder-Wert; ist der Wert eine `Layout`-Klasse, wird sie instanziiert und ihr `view()` gerendert, sonst als View-Name behandelt. Die Layout-View erhält:
+
+| Variable | Inhalt |
+|---|---|
+| `content` | das gerenderte Report-HTML (Bänder) |
+| `title` | `Report::name()` |
+| `ctx` | der `RenderContext` |
+| `report` | die `Report`-Instanz |
+| `layout` | die `Layout`-Instanz (oder `null`) |
+| `baseLayout` | `Layout::baseLayout()` (Blade-`@extends`-Hinweis) |
+| `pageSetup` | aufgelöste `PageSetup` (Config → Layout → Report) |
+| `meta` | Meta-Zeile aus `options['meta']` |
+
+Hinweis: Die `PageSetup`-Kaskade ist in v1 **ganzheitlich** (erste gesetzte Ebene gewinnt); der **feldweise** Merge (z. B. nur die Ränder überschreiben) folgt.
+
+Die mitgelieferten Layout-Templates `default` und `letterhead` liegen unter `resources/views/layouts/`.
+
 **Layout vs. Bänder**
 
 - *Layout* = Chrome, Theming und Seitengerüst (wiederverwendbar).

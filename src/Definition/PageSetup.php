@@ -22,6 +22,31 @@ final readonly class PageSetup
         return new self;
     }
 
+    /**
+     * Build a PageSetup from the package config (reports.paper). Used as the
+     * lowest layer of the Config -> Layout -> Report cascade.
+     */
+    public static function fromConfig(mixed $config): self
+    {
+        $config = is_array($config) ? $config : [];
+
+        $margins = $config['margins'] ?? null;
+        $margins = is_array($margins) ? $margins : [];
+
+        return new self(
+            size: is_string($config['size'] ?? null) ? $config['size'] : 'a4',
+            orientation: is_string($config['orientation'] ?? null) ? $config['orientation'] : 'portrait',
+            unit: is_string($config['unit'] ?? null) ? $config['unit'] : 'mm',
+            margins: [
+                'top' => is_int($margins['top'] ?? null) ? $margins['top'] : 20,
+                'right' => is_int($margins['right'] ?? null) ? $margins['right'] : 15,
+                'bottom' => is_int($margins['bottom'] ?? null) ? $margins['bottom'] : 20,
+                'left' => is_int($margins['left'] ?? null) ? $margins['left'] : 15,
+            ],
+            dpi: is_int($config['dpi'] ?? null) ? $config['dpi'] : 96,
+        );
+    }
+
     public function portrait(): self
     {
         return $this->copy(orientation: 'portrait');

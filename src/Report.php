@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Guggach\Reports;
 
+use Guggach\Reports\Definition\PageSetup;
 use Guggach\Reports\Definition\ReportBuilder;
 use Guggach\Reports\Definition\ReportDefinition;
 use Guggach\Reports\Sources\ReportSource;
@@ -25,6 +26,15 @@ abstract class Report
     public function layout(): string
     {
         return 'default';
+    }
+
+    /**
+     * Optional report-level PageSetup override (highest priority in the
+     * Config -> Layout -> Report cascade, see docs/spec.md 5.5).
+     */
+    public function pageSetup(): ?PageSetup
+    {
+        return null;
     }
 
     /**

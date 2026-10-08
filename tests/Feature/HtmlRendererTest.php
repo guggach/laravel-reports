@@ -6,13 +6,15 @@ use Guggach\Reports\Definition\ReportBuilder;
 use Guggach\Reports\Report;
 use Guggach\Reports\Reports;
 use Guggach\Reports\Sources\ArraySource;
+use Guggach\Reports\Tests\Fixtures\CompanyLayout;
+use Guggach\Reports\Tests\Fixtures\PlainLayout;
 
 /**
  * @param  list<array<string, mixed>>  $records
  */
-function makeHtmlReport(array $records, ?Closure $configure = null): Report
+function makeHtmlReport(array $records, ?Closure $configure = null, ?string $layout = null): Report
 {
-    return new class($records, $configure) extends Report
+    return new class($records, $configure, $layout) extends Report
     {
         /**
          * @param  list<array<string, mixed>>  $records
@@ -20,6 +22,7 @@ function makeHtmlReport(array $records, ?Closure $configure = null): Report
         public function __construct(
             private readonly array $records,
             private readonly ?Closure $configure,
+            private readonly ?string $layout,
         ) {}
 
         public function key(): string
@@ -30,6 +33,11 @@ function makeHtmlReport(array $records, ?Closure $configure = null): Report
         public function name(): string
         {
             return 'Demo Report';
+        }
+
+        public function layout(): string
+        {
+            return $this->layout ?? 'default';
         }
 
         public function source(): ArraySource
@@ -116,4 +124,34 @@ it('exposes the locale to the bands and restores it afterwards', function (): vo
 
     expect($html)->toContain('locale=de');
     expect(app()->getLocale())->toBe('en');
+});
+
+it('wraps the report in a Layout class and passes slots and page setup', function (): void {
+    $report = makeHtmlReport([['name' => 'A']], layout: CompanyLayout::class);
+
+    $html = app(Reports::class)->html($report, options: ['meta' => ['company' => 'Acme AG']]);
+
+    expect($html)->toContain('data-layout="letterhead"')
+        ->toContain('Acme AG')
+        ->toContain('<p>A</p>');
+
+    // Layout-level PageSetup wins over the config default.
+    expect($html)->toContain('<meta name="page-size" content="a4-landscape">');
+});
+
+it('falls back to the config page setup when the layout defines none', function (): void {
+    config(['reports.paper' => [
+        'size' => 'a4',
+        'orientation' => 'portrait',
+        'unit' => 'mm',
+        'margins' => ['top' => 10, 'right' => 10, 'bottom' => 10, 'left' => 10],
+        'dpi' => 96,
+    ]]);
+
+    $report = makeHtmlReport([['name' => 'A']], layout: PlainLayout::class);
+
+    $html = app(Reports::class)->html($report);
+
+    expect($html)->toContain('<meta name="page-size" content="a4-portrait">')
+        ->toContain('<p>A</p>');
 });
