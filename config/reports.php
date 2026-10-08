@@ -9,16 +9,32 @@ return [
     | Definitions
     |--------------------------------------------------------------------------
     |
-    | Base path and PSR-4 namespace where report classes and their sources
-    | live. Both are configurable so a host application can move them.
+    | Reports live in self-contained module folders below "path". The path and
+    | the PSR-4 "namespace" must form a consistent pair (the path is the PSR-4
+    | target directory of the namespace). The default app/Reports + App\Reports
+    | needs no composer change. Any other path must be registered by the host
+    | application in composer.json (autoload.psr-4).
     |
     */
 
-    'path' => resource_path('reports'),
+    'path' => app_path('Reports'),
 
     'namespace' => 'App\\Reports',
 
-    'source_namespace' => 'App\\Reports\\Sources',
+    /*
+    |--------------------------------------------------------------------------
+    | Shared layout (corporate identity)
+    |--------------------------------------------------------------------------
+    |
+    | The layout is the single deliberate exception to the self-contained
+    | report module: most reports share one corporate identity, so it lives in
+    | a shared directory that reports reference instead of copying.
+    |
+    */
+
+    'layout_path' => app_path('Reports/Layout'),
+
+    'layout_namespace' => 'App\\Reports\\Layout',
 
     /*
     |--------------------------------------------------------------------------
@@ -39,8 +55,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Localization
+    |--------------------------------------------------------------------------
+    |
+    | "locale" defaults to the application locale (null). "fallback_locale" is
+    | used when a translation is missing. "locales" is an allow-list for
+    | validation and the generated filter UI. The host application owns the
+    | language handling; a locale may later be resolved per detail/form record.
+    |
+    */
+
+    'locale' => null,
+
+    'fallback_locale' => 'en',
+
+    'locales' => ['en', 'de'],
+
+    /*
+    |--------------------------------------------------------------------------
     | Page setup
     |--------------------------------------------------------------------------
+    |
+    | Global defaults; a layout or a report may override individual values.
+    |
     */
 
     'paper' => [
@@ -88,7 +125,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | The optional filter form and preview frame are stack-specific:
-    | "blade-livewire", "inertia-vue" or "inertia-react".
+    | "blade-livewire", "inertia-vue" or "inertia-react". The filter UI must
+    | pass the active locale through so generated labels are translated.
     |
     */
 

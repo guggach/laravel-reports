@@ -6,6 +6,7 @@ namespace Guggach\Reports;
 
 use Guggach\Reports\Definition\ReportBuilder;
 use Guggach\Reports\Definition\ReportDefinition;
+use Guggach\Reports\Sources\ReportSource;
 
 abstract class Report
 {
@@ -16,7 +17,15 @@ abstract class Report
 
     abstract public function name(): string;
 
+    /** The data source of this report (report-local, never shared). */
+    abstract public function source(): ReportSource;
+
     abstract public function define(ReportBuilder $builder): void;
+
+    public function layout(): string
+    {
+        return 'default';
+    }
 
     /**
      * @param  array<string, mixed>  $filters

@@ -16,6 +16,7 @@ Leitprinzipien:
 3. **PHP-first:** Reportdefinitionen sind PHP-Klassen. JSON/XML ist eine spätere, dünne Serialisierungs-Schicht auf dasselbe interne Modell.
 4. **Ein Renderer (Chromium), zwei Modi:** *Flow* (Browser paginiert) und *Strict* (fixe Bandhöhen, arithmetische Seitenaufteilung).
 5. **Layouts:** wiederverwendbare, einbindbare Layouts (Blade/Vue/React) sichern ein einheitliches Aussehen (Logo, Kopf/Fuss, Typografie) über mehrere Reports hinweg.
+6. **Jeder Report ist in sich konsistent (self-contained).** Report, Datenquellen und Bänder liegen in einem Modul und werden **nicht zwischen Reports geteilt** – das vermeidet versteckte Kopplung und Seiteneffekte, wenn ein Report geändert wird. Einzige Ausnahme ist das geteilte **Layout** (Corporate Identity).
 
 ---
 
@@ -25,7 +26,7 @@ Laravel ist hervorragend für Webseiten und CRUD-Formulare, diese sind aber schl
 
 Reporttypen, die das Paket abdecken soll:
 
-- **Einzelformular** – ein Datensatz, Felder über die Seite verteilt (z. B. Rechnung, Anschreiben, Einzahlungsschein).
+- **Einzelformular** – Felder über die Seite verteilt (z. B. Rechnung, Anschreiben, Einzahlungsschein). Ein Formular wird aus **je einem Datensatz** erzeugt; bei mehreren Datensätzen wird das Formular je Datensatz wiederholt (z. B. mehrere Rechnungen in einem Lauf).
 - **Liste** – Loop über eine Datenmenge, Excel-ähnlich, mehrzeilig pro Detailzeile (z. B. Preisliste, Buchungsliste).
 - **Klassischer Spaltenreport** – Sonderform der Liste: Spalten mit Label, Wert (Feldname oder Closure), Formatierung, Ausrichtung und optionaler Summenzeile; schnell definierbar, ohne eigenes Band-Markup.
 
@@ -84,11 +85,13 @@ Page Footer
 
 | | Einzelformular | Liste |
 |---|---|---|
-| Datenmenge | 1 Datensatz | n Datensätze |
-| Detail-Band | einmal, freies Layout | pro Datensatz, typ. Gridzeile |
-| Bruchverhalten | „nicht mitten durchbrechen" pro Feldgruppe | pro Detailzeile kein Umbruch |
-| Gesamtseiten | bekannt nach Pagination | oft erst nach Pagination |
+| Datenmenge | n Datensätze (n Formulare; häufig n = 1) | n Datensätze |
+| Detail-Band | pro Datensatz einmal; erzeugt ein vollständiges, eigenständiges Formular (z. B. eine Rechnung) | pro Datensatz, typ. Gridzeile |
+| Bruchverhalten | „nicht mitten durchbrechen" pro Feldgruppe; Formulare laufen nicht ineinander | pro Detailzeile kein Umbruch |
+| Gesamtseiten | bekannt nach Pagination (je Formular bzw. über alle Formulare) | oft erst nach Pagination |
 | Modus | meist **Strict** | meist **Flow** |
+
+**Einzelformular ≠ nur ein Datensatz:** Die Datenmenge ist nicht grundsätzlich auf einen Datensatz beschränkt. Werden z. B. mehrere Rechnungen in einem Lauf erzeugt, ist **jeder Detail-Datensatz ein vollständiges Einzelformular**. Bei zwei Rechnungen wird das Einzelformular also zweimal ausgeführt – je Datensatz einmal. Das Detail-Band (Formular-Markup) bleibt dabei identisch; die Engine wiederholt es pro Datensatz und trennt die Wiederholungen sauber (Seitenumbruch bzw. eigenständiger Strict-Container je Formular), sodass keine Formulare ineinanderlaufen. Die Abgrenzung zur Liste liegt daher **nicht** in der Anzahl Datensätze, sondern darin, dass ein Durchlauf des Detail-Bands ein in sich geschlossenes Formular ergibt, während die Liste kompakte, fortlaufende Detailzeilen erzeugt. Umfasst ein Formular mehrere Seiten (z. B. eine dreiseitige Rechnung), muss der Seitenzähler **je Formularinstanz** neu bei 1 beginnen können – siehe 6.6.
 
 Ein **klassischer Spaltenreport** ist die einfachste Ausprägung der Liste: Spalten = Label + Feld/Closure + Format + Ausrichtung, plus optionale Fuss-Summe. Er nutzt intern dieselbe Band-Pipeline (Grid-Header, Detailzeile, Report-Fuss), benötigt aber kein eigenes Blade-Markup.
 
@@ -119,12 +122,18 @@ Guggach\Reports\ReportsServiceProvider
 Guggach\Reports\Facades\Reports                // Reports::render(), ::run(), ::presets()
 
 Guggach\Reports\Report                          // Basisklasse, die der Entwickler erbt
-Guggach\Reports\Sources\ReportSource            // Basisklasse für Datenquellen
+Guggach\Reports\Sources\ReportSource            // abstrakte Basis: fields(), parameters(), records()
 Guggach\Reports\Sources\ReportField
 Guggach\Reports\Sources\ReportParameter
+Guggach\Reports\Sources\EloquentSource          // Eloquent Model/Builder
+Guggach\Reports\Sources\QuerySource             // DB::table(...), optional Connection
+Guggach\Reports\Sources\RawSqlSource            // DB::select() mit Bindings/Connection
+Guggach\Reports\Sources\CollectionSource        // Illuminate\Support\Collection
+Guggach\Reports\Sources\ArraySource             // array (in-memory)
 
 Guggach\Reports\Definition\ReportDefinition     // DTO
 Guggach\Reports\Definition\ReportBuilder
+Guggach\Reports\Definition\GroupDefinition      // Level, Keys, enrichWith()/drivesWith(), Bänder, Aggregate (geordnete Liste)
 Guggach\Reports\Definition\Bands\Band
 Guggach\Reports\Definition\Bands\PageHeader | PageFooter
 Guggach\Reports\Definition\Bands\ReportStart | ReportEnd
@@ -138,10 +147,14 @@ Guggach\Reports\Layouts\Layout                   // Layout-Basisklasse (Slots, C
 Guggach\Reports\Layouts\LayoutRegistry
 
 Guggach\Reports\Engine\ReportEngine             // Orchestrierung der Pipeline
-Guggach\Reports\Engine\GroupResolver
+Guggach\Reports\Engine\GroupResolver            // Run-basiert (Default) oder Top-Down (Source je Level)
+Guggach\Reports\Engine\GroupContext             // Level, Keys/Run, Gruppendaten, Kind-Parameter
 Guggach\Reports\Engine\AggregateResolver
-Guggach\Reports\Engine\Paginator                 // Flow- und Strict-Implementierung
+Guggach\Reports\Engine\BandRenderer             // rendert ein einzelnes Band (Interface)
+Guggach\Reports\Engine\FlowPaginator            // Flow-Assembler; hier liegt die Record-Schleife
+Guggach\Reports\Engine\Paginator                 // Flow- und Strict-Implementierung (Strict folgt)
 Guggach\Reports\Engine\RenderContext             // Datenkontext für Blade-Bänder
+Guggach\Reports\Engine\LocaleScope               // setzt/restauriert App- & Carbon-Locale, verschachtelbar (Run/Detail)
 
 Guggach\Reports\Aggregates\Aggregate             // Interface
 Guggach\Reports\Aggregates\Sum | Avg | Count | Min | Max
@@ -150,7 +163,8 @@ Guggach\Reports\Filters\FilterBag
 Guggach\Reports\Filters\FilterField
 Guggach\Reports\Filters\PresetRepository
 
-Guggach\Reports\Contracts\Renderer               // html | pdf | ...
+Guggach\Reports\Contracts\ReportRenderer         // html | pdf | ... (Default: HtmlRenderer)
+Guggach\Reports\Renderers\HtmlRenderer           // Bänder + Layout → HTML
 Guggach\Reports\Contracts\Exporter               // word | excel | csv (v2)
 Guggach\Reports\Output\OutputOptions
 ```
@@ -161,6 +175,38 @@ Der Reportinhalt wird mit **Blade** (oder reinem PHP) gerendert. Jedes Band erh�
 
 Wichtig: Die optionalen UI-Stubs (Abschnitt 11) rendern **nur** das Filterformular und den umgebenden Frame. **Sie rendern nie den Report selbst.**
 
+### 4.4 Ausführungsablauf (Record für Record)
+
+Dieser Ablauf ist zentral für das Verständnis und sollte auch in der Entwickler-Doku mit Grafik stehen. Die **Record-Schleife** liegt im **Paginator/Band-Assembler**, nicht im Renderer (der Renderer ist nur die Ausgabestufe).
+
+```mermaid
+flowchart TD
+    A["Reports::render(report, filters, options)"] --> B["ReportEngine::render()"]
+    B --> C["LocaleScope::run(locale)<br/>App-/Carbon-Locale setzen"]
+    C --> D["report.definition()<br/>→ ReportDefinition (Bänder, Gruppen)"]
+    D --> E["report.source()<br/>→ ReportSource (reportlokal)"]
+    E --> F["Pipeline: filtern → sortieren → gruppieren → aggregieren"]
+    F --> G{"Paginator<br/>(Flow | Strict)"}
+    G --> H["foreach Record:<br/>RenderContext(record, index, groups, aggregates, page, locale)"]
+    H --> I["Detail-Band rendern<br/>Blade-View ODER Closure"]
+    I --> J["Band auf Seite platzieren /<br/>Umbruch entscheiden (Strict)"]
+    J -->|weiterer Record| H
+    J --> K["HtmlRenderer::renderLayout()<br/>Layout-Slots + Band-HTML"]
+    K --> L["Output-Adapter<br/>HTML | PDF"]
+    C -. restore im finally .-> M["vorherige Locale"]
+```
+
+Ablauf in Worten (entspricht den Bau-Schritten a/b):
+
+1. `ReportEngine` öffnet einen `LocaleScope` (setzt App-/Carbon-Locale, restauriert danach).
+2. `Report::definition()` liefert die `ReportDefinition` (Bänder, Gruppen, PageSetup, Layout).
+3. `Report::source()` liefert die `ReportSource`; die Pipeline filtert/sortiert/gruppiert/aggregiert.
+4. Der **Paginator** iteriert die Datensätze und baut **pro Record** einen `RenderContext`.
+5. Das **Detail-Band** wird pro Record gerendert (Blade-View oder Closure mit `RenderContext`).
+6. `HtmlRenderer` setzt die Bänder in die Layout-Slots; der Output-Adapter liefert HTML/PDF.
+
+Kernaussage für Entwickler: Ein Record = ein Durchlauf des Detail-Bands. Der `RenderContext` ist der einzige Übergabepunkt zwischen Engine und Blade-Markup.
+
 ---
 
 ## 5. Definition und API
@@ -168,45 +214,47 @@ Wichtig: Die optionalen UI-Stubs (Abschnitt 11) rendern **nur** das Filterformul
 ### 5.1 Report-Basisklasse (Skizze)
 
 ```php
-namespace App\Reports;
+namespace App\Reports\PriceList;
 
-use Guggach\Reports\Report;
+use Guggach\Reports\Report as BaseReport;
 use Guggach\Reports\Definition\ReportBuilder;
+use Guggach\Reports\Definition\PageSetup;   // nur bei Layout-Override nötig
 
-final class PriceListReport extends Report
+final class Report extends BaseReport
 {
-    public function key(): string
-    {
-        return 'price_list';
-    }
+    public function key(): string  { return 'price_list'; }
+    public function name(): string { return 'Preisliste'; }
 
-    public function name(): string
-    {
-        return 'Preisliste';
-    }
-
-    /** Datenquelle (PHP-first, Eloquent/Query-Builder). */
+    /** Datenquelle: austauschbarer Adapter (siehe 7.1). */
     public function source(): \Guggach\Reports\Sources\ReportSource
     {
-        return new \App\Reports\Sources\PriceSource($this->filters());
+        return new Source($this->filters());   // App\Reports\PriceList\Source
     }
 
     /** Band-, Filter- und Aggregatdefinition. */
     public function define(ReportBuilder $r): void
     {
-        $r->mode(ReportMode::Flow)
-          ->pageSetup(PageSetup::a4()->portrait()->marginsMm(20, 15, 20, 15));
+        // Papierformat, Orientierung und Ränder kommen aus Config bzw. Layout
+        // (Abschnitt 5.5 / 13) und werden hier nur bei Abweichung überschrieben:
+        // $r->pageSetup(PageSetup::a4()->landscape());
 
-        $r->detail(view: 'reports.price-row', height: 6)   // Blade-View, volle Freiheit
-          ->repeatGridHeader(view: 'reports.price-grid-head');
+        $r->detail(view: 'detail', height: 6)          // → <Modul>/views/detail.blade.php
+          ->repeatGridHeader(view: 'grid-head');
 
-        $r->pageHeader(view: 'reports.header')->height(15)->hideOnFirstPage();
-        $r->pageFooter(view: 'reports.footer')->height(12);   // enthält Seitenzahlen
+        $r->pageHeader(view: 'header')->height(15)->hideOnFirstPage();
+        $r->pageFooter(view: 'footer')->height(12);    // enthält Seitenzahlen
 
-        $r->group('category')
-          ->header(view: 'reports.category-head')
-          ->footer(view: 'reports.category-foot')
-          ->aggSum('price', as: 'category_total');
+        // Gruppen verschachtelt: Reihenfolge = Level 1..n
+        $r->group('category', function ($g) {
+            $g->header(view: 'category-head')
+              ->footer(view: 'category-foot')
+              ->aggSum('price', as: 'category_total')
+              ->enrichWith(CategoryInfo::class);   // Zusatzdaten einmal pro Gruppe (7.4)
+
+            $g->group('brand', function ($g) {
+                $g->header(view: 'brand-head');
+            });
+        });
 
         $r->aggregate('grand_total', Sum::class, field: 'price', scope: 'report');
     }
@@ -222,10 +270,33 @@ Ein Report kann auf zwei Stufen definiert werden – die Report-Engine kennt bei
 
 Beide Stufen nutzen denselben `ReportEngine` und dieselben Output-Adapter; L2 ergänzt den Band-Assembler.
 
-### 5.3 Definitionen speichern
+### 5.3 Definitionen speichern (Report-Module)
 
-- Default-Basispfad: `resources/reports` (per Config änderbar).
-- PHP-first: Der Entwickler legt Report-Klassen und Blade-Views dort ab bzw. in `App\Reports`.
+- Default-Basispfad: `app_path('Reports')` (Config `reports.path`, änderbar). Namespace `App\Reports` – damit ist **keine** Composer-Anpassung nötig (Laravel mappt `App\` auf `app/`).
+- **Ein Report = ein Modulordner.** Alles, was zum Report gehört, liegt in diesem einen Ordner – keine Trennung mehr zwischen `app/`-Klassen und Blade-Views:
+  ```
+  app/Reports/
+  ├─ Layout/               ← geteiltes CI-Layout (einzige Ausnahme, siehe 5.5)
+  └─ PriceList/
+     ├─ Report.php         → App\Reports\PriceList\Report  (extends Guggach\Reports\Report)
+     ├─ Source.php         → optional (ReportSource-Adapter, siehe 7.1)
+     ├─ Layout.php         → optional (nur bei echtem Sonderfall)
+     ├─ lang/
+     │  ├─ de.php
+     │  └─ en.php
+     └─ views/
+        ├─ detail.blade.php
+        ├─ grid-head.blade.php
+        ├─ header.blade.php
+        └─ footer.blade.php
+  ```
+  Der Ordner ist self-contained: Report, Datenquellen und Bänder liegen beieinander und gehören **nur diesem Report**. Es gibt bewusst **keine geteilten Report-Sources** – nur das Layout (5.5) ist report-übergreifend. So kann ein Report geändert werden, ohne andere zu beeinflussen (Leitprinzip 6).
+- **Einzige Ausnahme: geteilte Layouts.** Weil das Layout die Corporate Identity trägt und für die meisten Reports **identisch** ist, liegt es zentral unter `app/Reports/Layout/` (Config `reports.layout_path`) – ein Report referenziert es, statt eine Kopie anzulegen. Module können zusätzlich ein eigenes `Layout.php` haben, wenn sie wirklich abweichen.
+- **Ordner-/Klassennamen:** Modulordner in `StudlyCase`, Hauptklasse konventionell `Report` (Discovery via `*/*/Report.php`), optional `Source`/`Layout`. Der stabile Report-Key kommt aus `key()` (z. B. `price_list`).
+- **Autoload (Invariante):** `reports.path` und `reports.namespace` müssen ein **konsistentes PSR-4-Paar** bilden – der Pfad ist das PSR-4-Zielverzeichnis des Namespace. Das Paket registriert **keinen** Autoloader zur Laufzeit.
+  - Liegen die Module unter `app/Reports/` (Namespace `App\Reports`), ist **keine** Anpassung nötig – Laravel mappt `App\` bereits auf `app/`.
+  - Liegt der Pfad woanders (z. B. `resources/reports`), trägt der Entwickler den Namespace in `composer.json` unter `autoload.psr-4` ein, z. B. `"App\\Reports\\": "resources/reports/"`. `reports:install` gibt genau diesen Snippet aus; dokumentieren genügt, das Paket schreibt nichts selbst.
+- **View-Auflösung:** Die `views/` jedes Moduls werden als Blade-Namespace registriert. Im Builder genügt daher der **relative** Name (`view: 'detail'`); voll qualifizierte View-Namen bleiben möglich.
 - Ein optionaler JSON-Loader (v2) kompiliert Definitionsdateien in dasselbe `ReportDefinition`-DTO.
 
 ### 5.4 Artisan-Vorlagen
@@ -238,7 +309,7 @@ php artisan reports:install {--stack=blade-livewire|inertia-vue|inertia-react}
 php artisan reports:list
 ```
 
-Die `make:report`-Vorlagen erzeugen typische Listen-, Spalten- und Rechnungs-Gerüste (Klasse + Blade-Bänder), die der Entwickler anpasst.
+Die `make:report`-Vorlagen erzeugen typische Listen-, Spalten- und Rechnungs-Gerüste als **Modulordner** (Klasse(n) + `views/`), die der Entwickler anpasst.
 
 ### 5.5 Layouts (einheitliches Aussehen)
 
@@ -247,14 +318,21 @@ Ein **Layout** ist das wiederverwendbare äussere Gerüst eines Reports: Logo, A
 **Definition und Einbindung**
 
 ```php
-namespace App\Reports\Layouts;
+namespace App\Reports\Layout;               // geteiltes CI-Layout; abweichendes Layout im Report-Modul (z. B. App\Reports\PriceList\Layout)
 
 use Guggach\Reports\Layouts\Layout;
+use Guggach\Reports\Definition\PageSetup;
 
 final class CompanyLayout extends Layout
 {
-    public function view(): string        { return 'reports.layouts.company'; } // Blade-View
-    public function baseLayout(): ?string { return 'reports.layouts.base'; }    // Vererbung wie @extends
+    public function view(): string        { return 'layouts.company'; } // Blade-View
+    public function baseLayout(): ?string { return 'layouts.base'; }    // Vererbung wie @extends
+
+    /** Layout-Vorgabe für Papier/Ränder/Orientierung (Report kann überschreiben). */
+    public function pageSetup(): ?PageSetup
+    {
+        return PageSetup::a4()->portrait()->marginsMm(20, 15, 20, 15);
+    }
 }
 ```
 
@@ -271,7 +349,18 @@ $r->layout(CompanyLayout::class);
 - äusseres HTML-Gerüst (`<html>`, `<head>` mit `<style>`/Fonts, `<body>`) für HTML und PDF.
 - benannte **Regionen/Slots**: `header`, `footer`, `logo`, `content`. Die Bänder und Detailinhalte werden in `content` gerendert.
 - Vorgaben für **Page Header/Footer**, die ein Report überschreiben kann.
+- Vorgaben für **`PageSetup`** (Papiergrösse, Orientierung, Ränder, Einheit, dpi) – siehe Kaskade unten.
 - die Anzeige der **Meta-Zeile** (aktive Filter/Sortierung).
+
+**Seiteneinrichtung: Kaskade Config → Layout → Report**
+
+`PageSetup` wird nicht in jedem Report wiederholt. Es gilt (niedrig → hoch, höher überschreibt):
+
+1. **Paket-Config** `reports.paper` (Abschnitt 13) – die globalen Defaults (`a4`, `portrait`, Ränder, `mm`, `dpi`).
+2. **Layout** `Layout::pageSetup()` – z. B. ein Rechnungslayout erzwingt engere Ränder.
+3. **Report** – nur Abweichungen, z. B. `$r->pageSetup(PageSetup::a4()->landscape())` oder `Report::pageSetup()`.
+
+Felder werden **feldweise** zusammengeführt (der Report muss nur die abweichenden Werte setzen); ohne Override bleibt der eingestellte Default. Analog gilt der Modus-Default `reports.default_mode` (Flow/Strict) als Fallback, sofern der Report nichts setzt.
 
 **Layout vs. Bänder**
 
@@ -282,12 +371,56 @@ $r->layout(CompanyLayout::class);
 **Vorlagen und Stacks**
 
 - Mitgeliefert: `default`, `letterhead` (Logo + Absender), `blank`; erzeugbar via `make:layout`.
-- Ablage unter `resources/views/reports/layouts` bzw. dem Config-Pfad.
+- Ablage: **geteilt** unter `app/Reports/Layout/` (Config `reports.layout_path`) – die einzige Ausnahme vom Modulprinzip (Abschnitt 5.3). Ein Report referenziert das geteilte CI-Layout statt es zu kopieren; nur echte Abweichungen bekommen ein eigenes `Layout.php` im Modul.
 - Layouts werden **immer serverseitig (Blade/PHP)** gerendert – auch wenn Filter-Formular und Vorschau-Frame in Vue/React laufen (Leitprinzip 1). Für den Frame gibt es separate, stack-spezifische Stubs.
 
 **Vererbung / Verschachtelung**
 
 - Ein Layout kann ein Parent-Layout erweitern (wie Blade `@extends`), z. B. Firmen-Grundlayout + rechnungs-spezifischer Kopf.
+
+### 5.6 Mehrsprachigkeit (Übersetzungen)
+
+Ein Report kann mehrsprachig sein. Der Aufrufer übergibt optional eine **Sprache**; ist keine gesetzt, gilt die App-Locale.
+
+**Bestandteile**
+
+- **Modul-eigene Lang-Dateien:** `app/Reports/<Name>/lang/<locale>.php` – Labels/Texte nur dieses Reports (nicht geteilt, Leitprinzip 6). Bei der Discovery wird jedes Modul als Laravel-Übersetzungs-Namespace registriert (Key = `key()`, z. B. `price_list::field.amount`).
+- **Labels:** `ReportField`-/Filter-Labels und Band-Texte über das Modul-Namespace (`__('price_list::field.amount')`); die generierten Filter-/Spalten-Labels folgen der aktiven Sprache.
+- **Blade:** reguläres `@lang`/`__()` in den Bändern.
+
+**Laufzeit-Ablauf**
+
+1. Aufruf mit Sprache: `Reports::render($report, $filters, locale: 'de')` bzw. `locale` in den Run-/`OutputOptions`.
+2. Die Engine setzt die Locale **vor** dem Run (`App::setLocale($locale)`), merkt sich die vorherige und **stellt sie nach dem Run garantiert wieder her** (`try/finally`) – kein globaler Seiteneffekt, auch in Jobs/Queues.
+3. Während des Runs ist die Locale in `RenderContext` und in der `ReportSource` verfügbar.
+
+**Datenquellen & `spatie/laravel-translatable`**
+
+- Die Locale ist **Teil des `ReportSource`-Kontexts** (`$this->locale()`). Zwei Muster:
+  - **Translatable-Modelle:** Die Query läuft, während die App-Locale gesetzt ist → `spatie/laravel-translatable` liefert die korrekte Sprache; nach dem Run wird zurückgesetzt. Das Reports-Paket setzt nur die Locale – `spatie/laravel-translatable` bleibt eine **optionale Host-Abhängigkeit** (nicht im `require` des Pakets).
+  - **Sprachspalte in der Tabelle:** Der Entwickler filtert selbst, z. B. `->where('lang', $this->locale())` oder `->whereIn('lang', [$this->locale(), $fallback])`.
+- Gruppierungs-/Sortier-Keys sollten **sprachneutral** sein; sprachabhängige Labels gehören in die Übersetzung, nicht in die Gruppenschlüssel.
+
+**Formatierung**
+
+- Datum, Zahl und Währung folgen der Locale (`Number::currency`, `->isoFormat`, `Carbon::setLocale`); die Engine setzt und restauriert auch die Carbon-Locale (`try/finally`).
+
+**Fallback & Richtung**
+
+- Fallback über `config('reports.fallback_locale')` bzw. die App-Fallback-Locale.
+- RTL: `lang`/`dir` am `<html>` aus der Locale setzen; das Layout kann pro Sprache Varianten/CSS bereitstellen.
+
+**Konfiguration** (siehe 13): `locale` (Default `null` = App-Locale), `fallback_locale`, `locales` (Allow-List).
+
+**Mehrere Sprachen in einem Output** (z. B. bilinguale Rechnung) ist bewusst **nicht** Teil von v1 – dafür genügen zwei Runs oder später mehrere Band-Sätze pro Sprache.
+
+**Erweiterung (vX): Sprache pro Detail-/Formularinstanz.** Beim Druck von z. B. 10 Rechnungen haben die Vertragspartner oft **unterschiedliche Sprachen**. Deshalb ist die Locale nicht starr an den Run gebunden, sondern **pro Detailrecord auflösbar** – ohne Umbau später ergänzbar:
+
+- `Detail::localeUsing(Closure|string|null $resolver)` – liefert die Sprache **je Datensatz**, z. B. `fn ($row) => $row->contract_language ?? $runLocale`. Default (v1) = Run-Locale (konstant).
+- Die Engine setzt/t restauriert die Locale dann **pro Detail-/Formularinstanz** über einen verschachtelten `LocaleScope` (nicht nur einmal pro Run). `LocaleScope` ist von Anfang an verschachtelbar ausgelegt.
+- **Datenebene:** Da die Detail-Query in der Regel **einmal vorab** läuft, muss sie für Per-Record-Sprachen **sprachneutral** sein (Fetch über IDs/Keys, z. B. Rechnungs-IDs). Die Übersetzung der Werte wird beim Rendern der Instanz aufgelöst (Translatable liest lazy) oder der Entwickler liefert die sprachspezifischen Werte pro Record mit. Report-Texte/Labels und Formatierung folgen der jeweiligen Instanz-Sprache.
+- Gruppen können analog eine Sprache tragen (`GroupContext`), was im Top-Down-Modus besonders sauber ist (eine Sprache je Gruppe/Source).
+- **v1 verhält sich identisch**, wenn kein Resolver gesetzt ist – es ist eine reine Erweiterung, kein Umbau.
 
 ---
 
@@ -304,9 +437,22 @@ $r->layout(CompanyLayout::class);
 | `repeatOnNewPage` | Band nach Seitenumbruch wiederholen (Grid-Header) |
 | `visibilities` | `hideOnFirstPage`, `hideOnLastPage`, `onlyOddPages`, `onlyEvenPages` |
 | `pages` | explizite Seitenliste (z. B. `[1]`) |
+| `formScope` | Markiert den Beginn einer **Formularinstanz** (Einzelformular, Abschnitt 6.6); jede Ausführung ist ein eigenständiges Formular |
+| `restartPageNumber` | Setzt den Seitenzähler beim Start jeder Formularinstanz auf 1 zurück; `{pages}` zählt dann die Seiten des Formulars (Default bei Einzelformularen) |
+| `localeUsing` | Resolver für die Sprache **je Detail-/Formularinstanz** (`fn ($row) => ...`); Default = Run-Locale (v1). Siehe 5.6 |
 | `view` / `closure` | Blade-View oder Closure, erhält den `RenderContext` |
 
 Höhen-Einheit und Bezugssystem werden über `PageSetup` (mm, A4, Ränder) definiert.
+
+**Bänder sind Konfigurationsobjekte – mit Escape-Hatch (Variante A).** Der Normalfall ist ein Blade-`view` oder eine `closure`; der Builder erzeugt die eingebauten Band-Klassen (`Detail`, `PageHeader`, `GroupHeader`, …). Die Band-Klassen sind bewusst **nicht `final`**: Braucht ein Report eine eigene Klasse (z. B. die Generierung eines **Swiss QRR Einzahlungsscheins**), kann er ein Band-Subtyp bauen und die **Instanz** direkt an den Builder geben:
+
+```php
+$r->detail(new QrBillDetail(...));          // statt view: 'qrr'
+$g->header(new MyGroupHeader(...));          // in der Gruppe
+$r->pageFooter(new QrFooter, closure: fn ($ctx) => ...); // Instanz + Overrides
+```
+
+Die Slot-Methoden akzeptieren `Detail|string|null` usw. (Union), sind also rückwärtskompatibel. So bleibt „view“ der Normalfall, ohne einen Umbau zu erzwingen, wenn ein Sonderband nötig wird.
 
 ### 6.2 Page Header / Footer
 
@@ -330,8 +476,30 @@ Höhen-Einheit und Bezugssystem werden über `PageSetup` (mm, A4, Ränder) defin
 ### 6.5 Gruppen Header/Footer Level 1…n
 
 - Bedingung: Änderung an einem oder mehreren definierten Attributen; beliebig verschachtelt.
+- **Modell:** `ReportDefinition` hält die Gruppen als **geordnete Liste/Collection** `GroupDefinition[]`; die Position ergibt das Level (Index 0 → Level 1). Jede `GroupDefinition` trägt Keys, Header-/Footer-Band, Aggregate und optionalen Seitenumbruch. Gruppen sind **optional** (0…n); im Builder verschachtelt (`$g->group(...)` erzeugt Level 2) oder flach mit explizitem Level.
+- **Datenbezug je Level:** Standard ist der Bezug aus dem Ergebnis der Detail-Source (Run-basiert, siehe 7.2). Zusätzlich kann **jedes Level eine eigene `ReportSource`** haben: **`enrichWith()`** holt einmal pro Gruppe Zusatzdaten/Aggregate (ohne die Detailzeilen per Join aufzublähen), **`drivesWith()`** lässt die Source die Schleife treiben (Top-Down). Ein `link`-Mapping (Keys/Feld-Mapping) parametrisiert die Gruppen-Source. Details siehe 7.4.
 - Sortierung wird vom `GroupResolver` erzwungen (siehe 7.2).
 - Datenbezug wie Report-Kopf/-Fuss (Query oder Aggregate).
+
+### 6.6 Formularinstanzen und Seitenzähler
+
+Ein Einzelformular wird pro Detail-Datensatz einmal ausgeführt (Abschnitt 3.3). Jede Ausführung ist eine **Formularinstanz** und kann **mehrere Seiten** umfassen (z. B. eine dreiseitige Rechnung). Damit `{page}`/`{pages}` sinnvoll bleiben, muss der Seitenzähler je Instanz zurückgesetzt werden können.
+
+- Das Detail-Band markiert mit `formScope` (bzw. dessen Ausführung) den Beginn einer Formularinstanz.
+- `restartPageNumber: true` setzt `{page}` beim Start jeder Instanz auf 1 zurück; `{pages}` liefert dann die Seitenzahl der **aktuellen Instanz**, nicht des Gesamtreports. Default bei Einzelformularen.
+- Reportweit steuerbar über `pageNumbering: 'continuous' | 'perForm'` (Default `continuous`; Einzelformular-Vorlagen wie `invoice` setzen `perForm`).
+
+Beispiel – zwei Rechnungen mit 2 bzw. 3 Seiten:
+
+```
+Rechnung 1:  Seite 1/2, 2/2
+Rechnung 2:  Seite 1/3, 2/3, 3/3
+```
+
+- **Strict:** Der Assembler kennt die Formulargrenzen (jedes `formScope`-Detail bzw. jeder Instanzblock) und setzt den Zähler beim Aufbau der `.page`-Container zurück. Da die Pagination in PHP berechnet wird, sind `{page}` **und** `{pages}` pro Instanz im selben Durchlauf bekannt.
+- **Flow:** Chromium zählt über das ganze Dokument. Ein Reset pro Instanz ist nur über CSS-`counter-reset` je Formular-Container bzw. einen zweiten Platzhalter-Durchlauf möglich und bleibt eingeschränkt. Für verlässliche Per-Formular-Seitenzahlen wird **Strict** empfohlen.
+- `visibilities` wie `hideOnFirstPage`/`hideOnLastPage`/`onlyOddPages`/`onlyEvenPages` und `pages` beziehen sich bei aktiver Formularinstanz auf die Seiten **innerhalb** der Instanz.
+- Der Zähler kann auch **innerhalb** eines Formulars neu starten (z. B. mehrteilige Rechnung mit eigenem Deckblatt) – dafür mehrere `formScope`-Instanzen definieren.
 
 ---
 
@@ -339,15 +507,24 @@ Höhen-Einheit und Bezugssystem werden über `PageSetup` (mm, A4, Ränder) defin
 
 ### 7.1 Datenquelle
 
-- `ReportSource` (Basisklasse) mit `query(): Builder|Collection` und `defineFields(): ReportField[]`.
-- v1: Eloquent / Query-Builder.
-- Spätere Adapter: Raw SQL (SQL Anywhere/ODBC) und temporale Queries (`db-temporal`), hinter demselben Interface.
-- **Sicherheit:** Quellen und Feldnamen kommen ausschliesslich vom Entwickler. Enduser liefern nie Roh-SQL oder Spaltennamen (Allow-List).
+Die Herkunft der Daten ist **kein `if/switch` in einer Klasse**, sondern je Ursprung ein eigener, austauschbarer Adapter. Der Entwickler wählt pro Report in `source()` den passenden Typ; die Engine kennt nur die gemeinsame Basis.
+
+- `ReportSource` (abstrakt): `fields(): ReportField[]`, `parameters(): ReportParameter[]`, `records(): iterable`. Filter/Sortierung werden übergeben (`withFilters(FilterBag)`, `withSorts(...)`); der Adapter entscheidet über **Pushdown** (SQL `WHERE`/`ORDER BY`) vs. In-Memory.
+- Adapter (v1): `EloquentSource` (Model/Builder), `QuerySource` (`DB::table(...)`), `RawSqlSource` (`DB::select()` mit Bindings), `CollectionSource`, `ArraySource`.
+- **Keine eigenen DB-Treiber-Adapter:** ODBC, SQL Anywhere, eine temporale DB usw. sind Connections/Modelle des **Zielprojekts** – das Paket bringt dafür nichts mit. Solche Quellen sind normales `EloquentSource` oder `QuerySource`/`RawSqlSource` **mit der passenden Connection**; die Connection wird in der Source angegeben (`DB::connection('odbc')`, `->connection('temporal')`, oder das Model nutzt sie bereits).
+- **Eine Datenklasse pro Quelle im Report-Modul**, die der Report in `source()` referenziert (`return new Source($this->filters());`). Konkrete Quellen sind **reportlokal** und werden **nicht zwischen Reports geteilt** (Leitprinzip 6) – nur die Adapter-/Basisklassen des Pakets sind übergreifend. So hat jede Änderung an einem Report ausschliesslich lokale Wirkung.
+- Braucht dasselbe Query-Logisch mehrere Reports, gehört die gemeinsame Logik in die **Domänenschicht des Zielprojekts** (Repository/Query-Objekt); jeder Report kapselt seinen eigenen Source-Wrapper darauf. Der Report bleibt der Eigentümer seiner Source.
+- **Locale im Kontext:** Die aktive Sprache ist über `$this->locale()` (und im `RenderContext`) verfügbar, damit Queries entweder die gesetzte App-Locale nutzen (Translatable) oder selbst über eine Sprachspalte filtern (siehe 5.6).
+- Die **Gruppierung** erfolgt im Default **run-basiert** durch den `GroupResolver` auf der normierten Detail-Datenmenge; hat ein Level eine eigene Source (7.4), liefert diese die Gruppenzeilen und der Resolver nur noch die Hierarchie. Die Sortierung darf (muss aber nicht) der Adapter per Pushdown liefern.
+- **Sicherheit:** Quellen und Feldnamen kommen ausschliesslich vom Entwickler. Enduser liefern nie Roh-SQL oder Spaltennamen (Allow-List); `RawSqlSource` bindet Werte und akzeptiert keine Enduser-SQL.
 
 ### 7.2 Gruppierung und Sortierung
 
 - Mehrere Gruppenschlüssel, in dieser Reihenfolge sortiert (stabil).
-- Der `GroupResolver` gruppiert über *aufeinanderfolgende* Runs (nicht über global distinkte Werte) und liefert die Gruppen-Hierarchie.
+- Die Gruppen kommen aus der geordneten `GroupDefinition[]` (Abschnitt 6.5): **Position = Level (1…n)**; jede Gruppe kann einen oder mehrere Keys haben. Ist keine Gruppe definiert, entfallen Gruppenbänder komplett.
+- **Zwei Strategien** (siehe 7.4):
+  1. **Run-basiert (Default):** Eine Detail-Source liefert alle Zeilen; der `GroupResolver` gruppiert über *aufeinanderfolgende* Runs (nicht über global distinkte Werte) und liefert die Gruppen-Hierarchie. Filter/Sortierung werden zentral auf dieser einen Source angewandt. Jedes Level darf trotzdem per **`enrichWith()`** Zusatzdaten holen (7.4).
+  2. **Top-Down (optional):** Jedes Level hat eine eigene `ReportSource` (`drivesWith()`), die aus der Elternzeile parametrisiert wird und die Schleife treibt; die tiefste Ebene liefert die Detailrecords.
 - Filter- und Sortierfelder müssen zum Allow-List der `ReportField`s gehören; Felder, die Teil einer Gruppe sind, sind nicht frei sortierbar.
 
 ### 7.3 Aggregate / virtuelle Rechenfelder
@@ -369,6 +546,49 @@ interface Aggregate
   - Report-Fuss zeigt den Gesamtwert.
   - In einem Gruppenkopf Li liest man den bisherigen Running-Wert (Summe der vorangehenden Gruppen / Details), nicht den der aktuellen Gruppe.
 - Standardaggregate: `Sum`, `Avg`, `Count`, `CountDistinct`, `Min`, `Max`; eigene Klassen möglich.
+
+### 7.4 Gruppen-Datenquellen (Enrichment und Top-Down)
+
+Zwei **unabhängige** Fragen sind zu trennen:
+
+1. **Was treibt die Gruppenschleife?** Run-basiert (Detail treibt, Default) oder Top-Down (Source treibt).
+2. **Darf ein Level zusätzliche Daten per Source holen?** Ja – in **beiden** Modi.
+
+**Enrichment (auch run-basiert, der häufigste Fall):** Jedes Level kann über **`enrichWith()`** eine Source haben, die **einmal pro Gruppe** mit den Gruppenschlüsseln ausgeführt wird, um Zusatzdaten zu holen, die man sonst im Detail-Record per Join flach und ständig wiederholt mitführen müsste (z. B. Stammdaten, Adresse, Planwerte, gruppenbezogene Aggregate). Das Ergebnis steht im `GroupContext` (Header/Footer) bereit. Vorteil: der Detail-Join bleibt schmal, Daten werden **nicht pro Detailzeile dupliziert** und die Query läuft nur einmal je Gruppe.
+
+```
+Detail-Source:  SELECT order_id, category_id, amount …          -- kein Join auf Kategorietabelle
+Level 1 Source: SELECT category_id, name, target FROM categories WHERE category_id = :id
+                → wird einmal pro Gruppe ausgeführt, nicht pro Detailzeile
+```
+
+**Top-Down (optional):** Zusätzlich kann die Source die Schleife **treiben** – pro Elternzeile wird die Kind-Source ausgeführt, die tiefste Ebene liefert die Detailrecords.
+
+- **`GroupDefinition::enrichWith(): ?ReportSource`** – Enrichment-Source (Default-Nutzung): wird **einmal pro Gruppe** mit den Gruppenschlüsseln ausgeführt, treibt die Schleife **nicht**.
+- **`GroupDefinition::drivesWith(): ?ReportSource`** – Top-Down: die Source **treibt** die Iteration (intern `trigger: 'source'`).
+- `GroupDefinition::link(): array` – Mapping Gruppen-Keys/Elternzeile → Kind-Parameter, z. B. `['category_id' => 'id']` (oder Closure).
+- Interner DTO: `trigger: 'run' | 'source'` (durch `enrichWith` bleibt `run`, durch `drivesWith` wird `source`), Felder `enrichment` und `source`.
+- `GroupContext` (siehe 4.2) hält Level, Run/Keys, die Enrichment-/Treiber-Zeile und abgeleitete Kind-Parameter.
+
+Beispiel – Top-Down über zwei Ebenen:
+
+```
+Level 1 Source:  SELECT category, floor, SUM(amount) … GROUP BY category, floor
+                 → pro Zeile: Group-Header L1 + Aufruf Level 2
+Level 2 Source:  SELECT … WHERE category = :c AND floor = :f
+                 → pro Zeile: Group-Header L2 + Aufruf Detail-Source
+Detail-Source:   SELECT … WHERE … → Detail-Band pro Datensatz
+```
+
+**Aggregate:** Sie können in beiden Modi direkt aus einer Gruppen-Source kommen (DB-seitig berechnet), statt run-basiert aufsummiert zu werden. Beide Varianten müssen unterscheidbar sein (`AggregateDefinition` mit `source` vs. laufende Akkumulation); laufende Aggregate bleiben für Report-/Detail-Source erhalten.
+
+**Abwägung**
+
+- Enrichment: **+** wenige Queries (eine pro Gruppe), kein aufgeblähter Join, keine duplizierten Spalten, gruppenbezogene Aggregate per SQL; **−** zusätzliche Round-Trips bei sehr vielen Gruppen, Keys müssen konsistent sein.
+- Top-Down: **+** immer nur wenig Daten pro Query, tiefe Verschachtelung; **−** mehr Queries (N+1-artig), höhere Latenz, schwierigeres Caching.
+- **Filterung:** Beim Enrichment wird nur der Gruppenschlüssel übergeben (kein Freibrief). Beim Top-Down müssen Filter auf **jede** Ebene propagiert werden – Root bekommt die Report-Filter, abgeleitete Level erben via `link` und optional `inheritFilters: true`, jede Source validiert gegen ihre eigenen `ReportField[]`. Deshalb bleibt Top-Down **opt-in** und primär für entwicklerdefinierte Queries.
+
+**Wann was:** Enrichment-Sources sind auch run-basiert nutzbar (v1.1/v2); Top-Down für analytische Reports mit tiefer Verschachtelung (später, v2). Beide nutzen denselben `GroupResolver` und dieselbe Band-Pipeline.
 
 ---
 
@@ -463,11 +683,13 @@ Grenzen (bewusst): Seite-1-Sonderheader und das Wiederholen von Gruppenköpfen �
   - Bänder ohne `keepTogether` dürfen geteilt werden; mit `keepTogether` wird auf die nächste Seite geschoben.
   - Übersteigt ein Band die Nutzhöhe, ist es ein Definitionsfehler (Exception) oder – optional – ein Auto-Shrink-Hook.
   - Dynamische Textlängen sind Aufgabe des Entwicklers (fixe Höhe bzw. Overflow-Handling).
+  - `formScope`-Instanzen (Abschnitt 6.6) werden als eigene Seitenblöcke behandelt; zwischen zwei Instanzen endet die Seite, und der Seitenzähler kann neu starten.
 
 ### 10.4 Seitenzahlen und Platzhalter
 
 - **Flow:** native Chromium-Header/Footer.
 - **Strict:** Platzhalter werden nach der (in PHP berechneten) Pagination ersetzt; Gesamtseiten sind bereits bekannt.
+- **Formularinstanzen:** Bei Einzelformularen (Abschnitt 6.6) zählt der Seitenzähler je Formularinstanz neu; `restartPageNumber`/`pageNumbering: 'perForm'` setzt `{page}` auf 1 zurück und `{pages}` auf die Seitenzahl der aktuellen Instanz.
 - Optional ein zweiter Rendering-Durchlauf, falls ein Platzhalter von der finalen Seitenzahl abhängt und im Inhalt steht.
 
 ### 10.5 Wahl des Modus
@@ -508,14 +730,23 @@ User-Modell über Config; die Migration nutzt keinen festen Klassennamen.
 
 ```php
 return [
-    'path'        => resource_path('reports'),   // Basis-Pfad der Definitionen
-    'namespace'   => 'App\\Reports',             // PSR-4 der Report-Klassen
-    'source_namespace' => 'App\\Reports\\Sources',
+    // path und namespace bilden ein konsistentes PSR-4-Paar (5.3).
+    // Default app/Reports + App\Reports: keine composer-Anpassung nötig.
+    // Anderer Pfad? namespace passend setzen UND in composer.json autoload.psr-4 eintragen.
+    'path'        => app_path('Reports'),        // Basis: ein Modulordner pro Report (5.3)
+    'namespace'   => 'App\\Reports',             // PSR-4-Basis der Module = Zielverzeichnis von 'path'
+    'layout_path' => app_path('Reports/layout'), // geteiltes CI-Layout (einzige Ausnahme vom Modulprinzip)
+    'layout_namespace' => 'App\\Reports\\Layout', // PSR-4-Basis der geteilten Layouts
 
     'driver'      => 'browsershot',              // spatie/laravel-pdf
-    'default_mode'=> 'flow',                     // flow | strict
+    'default_mode'=> 'flow',                     // flow | strict (Fallback, Report kann überschreiben)
 
-    'paper' => [
+    // Mehrsprachigkeit (5.6)
+    'locale'          => null,                    // null = App-Locale; pro Aufruf überschreibbar
+    'fallback_locale' => 'en',
+    'locales'         => ['en', 'de'],            // Allow-List für Validierung/Filter-UI
+
+    'paper' => [                                 // globale PageSetup-Defaults; Layout/Report überschreiben feldweise (5.5)
         'size' => 'a4', 'orientation' => 'portrait',
         'unit' => 'mm', 'margins' => ['top' => 20, 'right' => 15, 'bottom' => 20, 'left' => 15],
         'dpi' => 96,
@@ -571,8 +802,8 @@ laravel-reports/
 │  ├─ ReportsServiceProvider.php
 │  ├─ Facades/Reports.php
 │  ├─ Report.php
-│  ├─ Sources/          (ReportSource, ReportField, ReportParameter)
-│  ├─ Definition/       (DTO, Builder, Bands, PageSetup, ReportMode)
+│  ├─ Sources/          (ReportSource + Eloquent/Query/RawSql/Collection/Array-Adapter, ReportField, ReportParameter)
+│  ├─ Definition/       (DTO, Builder, GroupDefinition, Bands, PageSetup, ReportMode)
 │  ├─ Layouts/          (Layout, LayoutRegistry)
 │  ├─ Engine/           (ReportEngine, GroupResolver, AggregateResolver, Paginator, RenderContext)
 │  ├─ Aggregates/
@@ -591,11 +822,14 @@ laravel-reports/
 ## 16. Roadmap
 
 **v1 – MVP**
-- `ReportSource`, `ReportField`, `ReportParameter` (Eloquent/Query-Builder)
-- `Report`-Basisklasse + `ReportBuilder` + DTO
+- `ReportSource` + Adapter `Eloquent`/`Query`/`Collection`/`Array` (`ReportField`, `ReportParameter`)
+- **Report-Module** (`app/Reports/<Name>/` mit `Report.php`, `views/`; Discovery, keine PSR-4-Anpassung nötig)
+- `Report`-Basisklasse + `ReportBuilder` + DTO (Gruppen als geordnete `GroupDefinition[]`)
 - **Flow**-Modus, Blade-Bänder, Grid-Header via `<thead>`
 - Page Header/Footer (simple), Seitenzahlen via Chromium
+- PageSetup-Kaskade Config → Layout → Report
 - Filter (Delegation + einfaches Blade-Formular), Sortierung
+- **Mehrsprachigkeit** (Locale pro Aufruf, Modul-`lang/`, Locale in der `ReportSource`, `try/finally`-Restore; siehe 5.6)
 - Presets (DB: privat/geteilt/global)
 - Output: HTML + PDF (inkl. still/archivierend)
 - **Layouts**: einbindbares Default-Layout (`letterhead`) + `make:layout`
@@ -605,29 +839,44 @@ laravel-reports/
 **v1.1 – Layout-Tiefe**
 - **Strict**-Modus mit arithmetischer Pagination
 - Verschachtelte Gruppen-Bänder, Aggregate mit Scope
+- **Gruppen-Enrichment-Sources** (eigene Query je Gruppe, run-basiert; siehe 7.4)
 - Page-Header-Sonderfälle (Seite 1, odd/even)
+- **Formularinstanzen** mit Per-Formular-Seitenzähler (`formScope`, `restartPageNumber`, `pageNumbering: 'perForm'`, siehe 6.6)
 - Vorlagen `banded-list`, `invoice`
 
 **v2 – Ausbau**
 - Word (PHPWord) + Excel (PhpSpreadsheet) + CSV
 - JSON-Loader aufs DTO
-- Raw-SQL-/`db-temporal`-Adapter
+- Multiple Connections (ODBC/temporale DB) über die Connection-Angabe der Host-Sources – kein eigener Treiber-Adapter
+- **Gruppen-Datenquellen / Top-Down** (eigene `ReportSource` je Level, `link`, Filter-Vererbung; siehe 7.4)
 - Inertia-Vue/React-Stubs, Run-History, Scheduling, Multi-Tenant
 
 ---
 
-## 17. Offene Entscheidungen
+## 17. Entscheidungen
 
-Noch zu bestätigen (im Entwurf mit diesen Defaults angenommen):
+**Bestätigt (2026-10-08):**
 
-1. **Filtertypen** – obige Tabelle inkl. `date/datetime`, `enum`, `relation`, `json` und NULL-Operatoren ist gesetzt? (Default: ja)
-2. **Wo die Query definiert wird** – im Report/`ReportSource` (Default) oder übergibt die Host-App die Collection? (Default: Report definiert Query)
-3. **Aggregat-Scope** – Scope `report` + `group:1..n`, Running-Semantik wie in 7.3? (Default: ja)
-4. **Admin-Presets** – `is_global` + konfigurierbares Gate statt harter Permission-Abhängigkeit? (Default: ja)
+1. **Filtertypen** – Tabelle inkl. `date/datetime`, `enum`, `relation`, `json` und NULL-Operatoren. ✔
+2. **Ort der Query** – im `ReportSource` des Report-Moduls, **nicht geteilt** (Leitprinzip 6). ✔
+3. **Aggregat-Scope** – `report` + `group:1..n`, Running-Semantik wie in 7.3. ✔
+4. **Admin-Presets** – `is_global` + konfigurierbares Gate statt harter Permission-Abhängigkeit. ✔
+5. **Per-Formular-Seitenzähler** – `formScope` + `restartPageNumber`, `pageNumbering`; Default `perForm` beim Einzelformular. ✔
+6. **Datenquellen-Adapter** – `Eloquent/Query/RawSql/Collection/Array`; ODBC/temporale DB über die **Connection des Zielprojekts** statt eigener Treiber-Adapter. ✔
+7. **Report-Modul** – self-contained Ordner unter `app/Reports/<StudlyName>/`, Namespace `App\Reports`, **keine** PSR-4-Anpassung; anderer Pfad nur mit dokumentiertem `composer.json`-Eintrag. ✔
+8. **Gruppen-Modell** – `GroupDefinition[]` als geordnete Liste, Position = Level, im Builder verschachtelt. ✔
+9. **PageSetup-Kaskade** – Config → Layout → Report mit feldweisem Merge. ✔
+10. **Geteiltes Layout** – `app/Reports/Layout/` als **einzige** Ausnahme vom Modulprinzip. ✔
+11. **Gruppen-Datenquellen** – `enrichWith()` (run-basiert) jetzt; `drivesWith()` (Top-Down) in v2 **oder bei erstem Bedarf**. ✔
+12. **Self-contained Reports** – keine geteilten Report-Sources; einzige Ausnahme bleibt das Layout. ✔
+13. **Paketname / Namespace** – `guggach/laravel-reports`, `Guggach\Reports`. ✔
+14. **Mehrsprachigkeit** – Sprache pro Aufruf, Modul-`lang/`, Locale im `ReportSource`, `try/finally`-Wiederherstellung (siehe 5.6). ✔
+15. **Bänder & Erweiterung (Variante A)** – Bänder sind Konfigurationsobjekte (Normalfall `view`/`closure`), Klassen **nicht `final`**; eigene Band-Klassen werden per **Instanz-Injektion** eingehängt (z. B. Swiss QRR; siehe 6.1). ✔
 
-Weitere offene Punkte:
-- Paketname final `guggach/laravel-reports`, Namespace `Guggach\Reports`?
-- Formal­ität der Strict-Überlauf-Politik: Exception vs. Auto-Shrink?
+**Weiterhin offen:**
+
+- Formalität der Strict-Überlauf-Politik: Exception vs. Auto-Shrink?
 - Ob die Free-form-Stufe (L1) bereits in v1 enthalten sein soll.
 - Lizenzhinweis PHPWord (LGPL-3.0) für v2-Doku.
-- Layout-Umfang: ein einbindbares Layout pro Report (Default) oder zusätzlich überschreibbare Layout-Zonen pro Band/Seite?
+- Layout-Umfang: ein Layout pro Report (Default) oder zusätzlich überschreibbare Layout-Zonen pro Band/Seite?
+- **Playground/Beispiele:** separate App (empfohlen) vs. Monorepo `packages/report/` – siehe Empfehlung im Gespräch.

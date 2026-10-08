@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Guggach\Reports;
 
+use Guggach\Reports\Contracts\ReportRenderer;
 use Guggach\Reports\Engine\ReportEngine;
+use Guggach\Reports\Renderers\HtmlRenderer;
 use Illuminate\Support\ServiceProvider;
 
 final class ReportsServiceProvider extends ServiceProvider
@@ -13,6 +15,7 @@ final class ReportsServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/reports.php', 'reports');
 
+        $this->app->singleton(ReportRenderer::class, HtmlRenderer::class);
         $this->app->singleton(ReportEngine::class);
         $this->app->singleton(Reports::class);
         $this->app->alias(Reports::class, 'reports');

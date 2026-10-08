@@ -3,11 +3,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>@yield('title', 'Report')</title>
+    <title>{{ $title ?? 'Report' }}</title>
     <style>
         /*
-         * Work in progress: the default report layout.
-         * Replaced by the layout/theming concept in docs/spec.md (section 5.5).
+         * Default report layout. Replaced by the layout/theming concept in
+         * docs/spec.md (section 5.5). Page setup follows config('reports.paper').
          */
         @page {
             size: A4 portrait;
@@ -17,12 +17,13 @@
         body {
             font-family: sans-serif;
             color: #1f2937;
+            margin: 0;
         }
     </style>
 </head>
 <body>
     <main>
-        @yield('content')
+        {!! $content ?? '' !!}
     </main>
 </body>
 </html>

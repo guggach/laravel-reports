@@ -6,6 +6,7 @@ use Guggach\Reports\Definition\ReportBuilder;
 use Guggach\Reports\Definition\ReportMode;
 use Guggach\Reports\Report;
 use Guggach\Reports\Reports;
+use Guggach\Reports\Sources\ArraySource;
 use Illuminate\Support\Facades\Schema;
 
 it('resolves the reports manager from the container', function (): void {
@@ -28,6 +29,11 @@ it('builds a report definition from a report class', function (): void {
         public function name(): string
         {
             return 'Demo';
+        }
+
+        public function source(): ArraySource
+        {
+            return new ArraySource;
         }
 
         public function define(ReportBuilder $builder): void
