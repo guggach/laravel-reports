@@ -684,7 +684,7 @@ Der `HtmlToPdf`-Contract ist treiberneutral. In Frage kommen (über `spatie/lara
 
 - **Default bleibt Chromium**, weil (a) die Bildschirm-Vorschau (iframe) exakt dem PDF entspricht und (b) die Spec Grid/Flex ausdrücklich erlaubt.
 - **WeasyPrint ist ein gleichwertiger optionaler Treiber** über denselben Contract – besonders attraktiv, weil es die in 10.2 genannten Flow-Grenzen (wiederholte Kopf-/Fusszeilen, Seitenzähler, Seite-1-Sonderfälle) nativ löst und leichter zu deployen ist (kein Node/Chromium).
-- Der Treiber wird **pro Deployment** gewählt (Host-Binding von `HtmlToPdf`), nicht pro Report hart verdrahtet. Ein Adapter auf `spatie/laravel-pdf` würde dessen Treiberwahl (browsershot/weasyprint/gotenberg/cloudflare/dompdf/chrome) direkt nutzbar machen.
+- Der Treiber wird **pro Deployment** gewählt (Host-Binding von `HtmlToPdf`), nicht pro Report hart verdrahtet. Der **mitgelieferte Adapter `Renderers\SpatieLaravelPdfConverter`** macht `spatie/laravel-pdf` (als `suggest`, nicht harte Abhängigkeit) mit dessen gesamter Treiberauswahl (browsershot/chrome/gotenberg/cloudflare/weasyprint/dompdf) nutzbar; der Treiber wird über `config('laravel-pdf.driver')` gewählt.
 - **Vorbehalt:** Wenn ein Report auf **CSS Grid** baut, ist Chromium die sichere Wahl; WeasyPrint nur nach Verifikation. Reine Tabellen-/Flex-Layouts laufen auf beiden.
 
 ---

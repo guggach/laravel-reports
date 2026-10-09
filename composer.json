@@ -32,7 +32,11 @@
         "pestphp/pest": "^3.8||^5.0",
         "pestphp/pest-plugin-laravel": "^3.0||^5.0",
         "phpstan/phpstan": "^2.0",
-        "rector/rector": "^2.0"
+        "rector/rector": "^2.0",
+        "spatie/laravel-pdf": "^2.0"
+    },
+    "suggest": {
+        "spatie/laravel-pdf": "Provides the HtmlToPdf adapter with several backends (browsershot, chrome, gotenberg, cloudflare, weasyprint)."
     },
     "autoload": {
         "psr-4": {

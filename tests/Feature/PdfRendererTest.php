@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Guggach\Reports\Contracts\HtmlToPdf;
+use Guggach\Reports\Renderers\SpatieLaravelPdfConverter;
 use Guggach\Reports\Reports;
 use Guggach\Reports\Tests\Fixtures\CompanyLayout;
 use Guggach\Reports\Tests\Fixtures\DemoReport;
@@ -40,4 +41,8 @@ it('stores the pdf to a file', function (): void {
 it('fails with a helpful message when no converter is bound', function (): void {
     expect(fn () => app(Reports::class)->pdf(new DemoReport([['name' => 'A']])))
         ->toThrow(RuntimeException::class, 'No HTML-to-PDF converter is bound');
+});
+
+it('ships a spatie laravel pdf adapter', function (): void {
+    expect(new SpatieLaravelPdfConverter)->toBeInstanceOf(HtmlToPdf::class);
 });
