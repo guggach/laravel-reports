@@ -726,6 +726,37 @@ Grenzen (bewusst): Seite-1-Sonderheader und das Wiederholen von Gruppenköpfen �
 - Es gibt **keine** Stack-Abhängigkeit für die Report-Erzeugung; ein Host ohne Stubs ruft einfach `Reports::render()`/`::run()` auf.
 - Die Stubs liefern ihr Verhalten über ein gemeinsames Schema (Abschnitt 8.3).
 
+### 11.1 Display-Frame und A4-Vorschau
+
+Der Report liefert **Inhalt + Druck-CSS**, nicht die Bildschirm-Simulation. Die A4-Vorschau (endloses Blatt, Schatten, Zoom, Toolbar) ist Aufgabe des **Frames** (UI-Stub). Grund: Dieselbe Ausgabe geht an Chromium für PDF; ein eingebauter Screen-Container müsste dort per `@media print` wieder entfernt werden und erzeugt schnell doppelte Ränder.
+
+**Verantwortlichkeiten**
+
+| Report/Layout | Frame |
+|---|---|
+| Bänder, Inhalt, Typografie, `@page` (mm) | Blatt-Darstellung am Screen (`@media screen`), Toolbar, Zoom |
+| exponiert die `PageSetup` | konsumiert die `PageSetup` und zeichnet das Blatt |
+
+**Geometrie-Übergabe (keine doppelte Wahrheit)**
+
+- Der Report-Wrapper exponiert `data-page-size`, `data-page-orientation` und CSS-Variablen (`--page-width`, `--page-height`, `--page-margin-*`) aus der aufgelösten `PageSetup`.
+- Der Frame leitet daraus Blattbreite/-höhe und Ränder ab.
+
+**Flow vs. Strict**
+
+- **Strict:** echte `.page`-Container (arithmetische Pagination) → am Screen direkt sichtbare Blätter; der Frame chront sie nur.
+- **Flow:** keine Container (der Browser paginiert) → der Frame simuliert das endlose A4-Blatt aus der `PageSetup`.
+
+**Einbettung: Dokument vs. Fragment**
+
+- `document` (Default): vollständiges HTML-Dokument (Layout liefert `<html>/<head>`); für Direktaufruf, Druck, PDF.
+- `fragment`: nur Body-Inhalt ohne Dokumenthülle, zum Einbetten in eine Host-Seite.
+- Für die Vorschau ist ein **`<iframe>`** auf den Dokument-Modus die robusteste Variante (CSS-Isolation, getreuer Druck via `iframe.contentWindow.print()`); das **Fragment** ist für enge Integration gedacht (Host trägt dann das Druck-CSS).
+
+**Druck**
+
+- `@media print` blendet die Frame-Chrome/Toolbar aus; es gilt das `@page` des Reports. Beim iframe wird der iframe-Inhalt gedruckt.
+
 ---
 
 ## 12. Persistenz / DB-Schema
@@ -896,4 +927,5 @@ laravel-reports/
 - Ob die Free-form-Stufe (L1) bereits in v1 enthalten sein soll.
 - Lizenzhinweis PHPWord (LGPL-3.0) für v2-Doku.
 - Layout-Umfang: ein Layout pro Report (Default) oder zusätzlich überschreibbare Layout-Zonen pro Band/Seite?
+- **Display-Frame/Vorschau:** Einbettung per `<iframe>` (Dokument-Modus, empfohlen) oder als `fragment` (nur Body) in die Host-Seite? Und: Frame-Stub samt A4-Screen-CSS als v1-Bestandteil?
 - **Playground/Beispiele:** separate App (empfohlen) vs. Monorepo `packages/report/` – siehe Empfehlung im Gespräch.
