@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Guggach\Reports;
 
+use Guggach\Reports\Definition\PageSetup;
 use Guggach\Reports\Definition\ReportDefinition;
 use Guggach\Reports\Engine\ReportEngine;
 use Stringable;
@@ -47,5 +48,14 @@ final readonly class Reports
     public function definition(Report $report): ReportDefinition
     {
         return $this->engine->definition($report);
+    }
+
+    /**
+     * The effective page setup (Config -> Layout -> Report). The preview frame
+     * uses it to size the on-screen paper sheet.
+     */
+    public function pageSetup(Report $report): PageSetup
+    {
+        return $this->engine->pageSetup($report);
     }
 }

@@ -3,61 +3,13 @@
 declare(strict_types=1);
 
 use Guggach\Reports\Definition\ReportBuilder;
-use Guggach\Reports\Report;
 use Guggach\Reports\Reports;
-use Guggach\Reports\Sources\ArraySource;
 use Guggach\Reports\Tests\Fixtures\CompanyLayout;
+use Guggach\Reports\Tests\Fixtures\DemoReport;
 use Guggach\Reports\Tests\Fixtures\PlainLayout;
 
-/**
- * @param  list<array<string, mixed>>  $records
- */
-function makeHtmlReport(array $records, ?Closure $configure = null, ?string $layout = null): Report
-{
-    return new class($records, $configure, $layout) extends Report
-    {
-        /**
-         * @param  list<array<string, mixed>>  $records
-         */
-        public function __construct(
-            private readonly array $records,
-            private readonly ?Closure $configure,
-            private readonly ?string $layout,
-        ) {}
-
-        public function key(): string
-        {
-            return 'demo';
-        }
-
-        public function name(): string
-        {
-            return 'Demo Report';
-        }
-
-        public function layout(): string
-        {
-            return $this->layout ?? 'default';
-        }
-
-        public function source(): ArraySource
-        {
-            return new ArraySource($this->records);
-        }
-
-        public function define(ReportBuilder $r): void
-        {
-            $r->detail(closure: fn ($ctx): string => '<p>'.$ctx->name.'</p>');
-
-            if ($this->configure instanceof Closure) {
-                ($this->configure)($r);
-            }
-        }
-    };
-}
-
 it('renders the detail band once per record, in order', function (): void {
-    $html = app(Reports::class)->html(makeHtmlReport([
+    $html = app(Reports::class)->html(new DemoReport([
         ['name' => 'A'],
         ['name' => 'B'],
         ['name' => 'C'],
@@ -73,7 +25,7 @@ it('renders the detail band once per record, in order', function (): void {
 });
 
 it('wraps the bands in the report layout', function (): void {
-    $html = app(Reports::class)->html(makeHtmlReport([['name' => 'A']]));
+    $html = app(Reports::class)->html(new DemoReport([['name' => 'A']]));
 
     expect($html)->toContain('<!DOCTYPE html>')
         ->toContain('<title>Demo Report</title>')
@@ -81,7 +33,7 @@ it('wraps the bands in the report layout', function (): void {
 });
 
 it('renders the bands in stack order', function (): void {
-    $report = makeHtmlReport([['name' => 'A']], function (ReportBuilder $r): void {
+    $report = new DemoReport([['name' => 'A']], function (ReportBuilder $r): void {
         $r->pageHeader(closure: fn (): string => 'HEADER');
         $r->reportStart(closure: fn (): string => 'START');
         $r->detail(closure: fn ($ctx): string => 'DETAIL:'.$ctx->name);
@@ -98,7 +50,7 @@ it('renders the bands in stack order', function (): void {
 });
 
 it('exposes index, total and position flags to the band', function (): void {
-    $report = makeHtmlReport([['name' => 'A'], ['name' => 'B']], function (ReportBuilder $r): void {
+    $report = new DemoReport([['name' => 'A'], ['name' => 'B']], function (ReportBuilder $r): void {
         $r->detail(closure: fn ($ctx): string => sprintf(
             '[%d/%d:%s%s]',
             $ctx->index,
@@ -116,7 +68,7 @@ it('exposes index, total and position flags to the band', function (): void {
 it('exposes the locale to the bands and restores it afterwards', function (): void {
     app()->setLocale('en');
 
-    $report = makeHtmlReport([['name' => 'A']], function (ReportBuilder $r): void {
+    $report = new DemoReport([['name' => 'A']], function (ReportBuilder $r): void {
         $r->detail(closure: fn ($ctx): string => 'locale='.($ctx->locale ?? 'null'));
     });
 
@@ -127,7 +79,7 @@ it('exposes the locale to the bands and restores it afterwards', function (): vo
 });
 
 it('wraps the report in a Layout class and passes slots and page setup', function (): void {
-    $report = makeHtmlReport([['name' => 'A']], layout: CompanyLayout::class);
+    $report = new DemoReport([['name' => 'A']], layout: CompanyLayout::class);
 
     $html = app(Reports::class)->html($report, options: ['meta' => ['company' => 'Acme AG']]);
 
@@ -148,7 +100,7 @@ it('falls back to the config page setup when the layout defines none', function 
         'dpi' => 96,
     ]]);
 
-    $report = makeHtmlReport([['name' => 'A']], layout: PlainLayout::class);
+    $report = new DemoReport([['name' => 'A']], layout: PlainLayout::class);
 
     $html = app(Reports::class)->html($report);
 

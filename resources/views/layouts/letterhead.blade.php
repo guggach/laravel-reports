@@ -11,7 +11,7 @@
         .letterhead-footer { border-top: 1px solid #ccc; margin-top: 24px; padding-top: 8px; color: #666; }
     </style>
 </head>
-<body data-layout="letterhead">
+<body data-layout="letterhead" data-page-size="{{ $pageSetup->size ?? 'a4' }}" data-page-orientation="{{ $pageSetup->orientation ?? 'portrait' }}">
     <header class="letterhead-header">
         {{ $meta['company'] ?? 'Company' }} {{-- logo slot --}}
     </header>

@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Guggach\Reports\Engine;
 
 use Guggach\Reports\Contracts\ReportRenderer;
+use Guggach\Reports\Definition\PageSetup;
 use Guggach\Reports\Definition\ReportDefinition;
+use Guggach\Reports\Layouts\LayoutResolver;
 use Guggach\Reports\Report;
 use RuntimeException;
 
@@ -13,6 +15,7 @@ final readonly class ReportEngine
 {
     public function __construct(
         private ?ReportRenderer $renderer = null,
+        private ?LayoutResolver $layouts = null,
     ) {}
 
     /**
@@ -33,5 +36,17 @@ final readonly class ReportEngine
     public function definition(Report $report): ReportDefinition
     {
         return $report->definition();
+    }
+
+    /**
+     * The effective page setup of a report (Config -> Layout -> Report). Used
+     * by the preview frame to size the on-screen paper sheet.
+     */
+    public function pageSetup(Report $report): PageSetup
+    {
+        $layouts = $this->layouts ?? new LayoutResolver;
+        $definition = $report->definition();
+
+        return $layouts->pageSetup($report, $layouts->resolve($report, $definition));
     }
 }

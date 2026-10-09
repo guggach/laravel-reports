@@ -7,13 +7,13 @@ namespace Guggach\Reports\Renderers;
 use Closure;
 use Guggach\Reports\Contracts\ReportRenderer;
 use Guggach\Reports\Definition\Bands\Band;
-use Guggach\Reports\Definition\PageSetup;
 use Guggach\Reports\Definition\ReportDefinition;
 use Guggach\Reports\Engine\BandRenderer;
 use Guggach\Reports\Engine\FlowPaginator;
 use Guggach\Reports\Engine\LocaleScope;
 use Guggach\Reports\Engine\RenderContext;
 use Guggach\Reports\Layouts\Layout;
+use Guggach\Reports\Layouts\LayoutResolver;
 use Guggach\Reports\Report;
 use Illuminate\View\Factory as ViewFactory;
 use Stringable;
@@ -26,6 +26,7 @@ final readonly class HtmlRenderer implements BandRenderer, ReportRenderer
 {
     public function __construct(
         private ViewFactory $views,
+        private LayoutResolver $layouts,
     ) {}
 
     public function format(): string
@@ -114,7 +115,7 @@ final readonly class HtmlRenderer implements BandRenderer, ReportRenderer
      */
     private function renderLayout(ReportDefinition $definition, string $content, RenderContext $context, Report $report, array $options): string
     {
-        $layout = $this->resolveLayout($this->layoutReference($report, $definition));
+        $layout = $this->layouts->resolve($report, $definition);
         $view = $layout instanceof Layout ? $layout->view() : $this->resolveLayoutView($definition->layout);
 
         return $this->renderView($view, [
@@ -124,38 +125,9 @@ final readonly class HtmlRenderer implements BandRenderer, ReportRenderer
             'title' => $report->name(),
             'layout' => $layout,
             'baseLayout' => $layout?->baseLayout(),
-            'pageSetup' => $this->resolvePageSetup($layout, $report),
+            'pageSetup' => $this->layouts->pageSetup($report, $layout),
             'meta' => is_array($options['meta'] ?? null) ? $options['meta'] : [],
         ]);
-    }
-
-    /**
-     * The report's own layout() wins over the builder layout when set.
-     */
-    private function layoutReference(Report $report, ReportDefinition $definition): string
-    {
-        $layout = $report->layout();
-
-        return $layout !== 'default' ? $layout : $definition->layout;
-    }
-
-    private function resolveLayout(string $reference): ?Layout
-    {
-        if (class_exists($reference) && is_subclass_of($reference, Layout::class)) {
-            return new $reference;
-        }
-
-        return null;
-    }
-
-    /**
-     * Config -> Layout -> Report (whole-object precedence for now).
-     */
-    private function resolvePageSetup(?Layout $layout, Report $report): PageSetup
-    {
-        return $report->pageSetup()
-            ?? $layout?->pageSetup()
-            ?? PageSetup::fromConfig(config('reports.paper'));
     }
 
     /**

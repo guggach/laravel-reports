@@ -757,6 +757,8 @@ Der Report liefert **Inhalt + Druck-CSS**, nicht die Bildschirm-Simulation. Die 
 
 - `@media print` blendet die Frame-Chrome/Toolbar aus; es gilt das `@page` des Reports. Beim iframe wird der iframe-Inhalt gedruckt.
 
+**Mitgelieferter Blade-Stub (v1).** Die Komponente `<x-reports::frame :url="…" :page-setup="$pageSetup" :title="…" />` rendert Toolbar, grauen Hintergrund und ein weisses A4-Blatt (Breite/Höhe/Ränder aus der `PageSetup`) mit dem Report im `<iframe>` (Auto-Höhe). `Reports::pageSetup($report)` liefert die effektive `PageSetup`. Vue/React-Stubs folgen.
+
 ---
 
 ## 12. Persistenz / DB-Schema

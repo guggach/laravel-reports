@@ -21,7 +21,7 @@
         }
     </style>
 </head>
-<body>
+<body data-page-size="{{ $pageSetup->size ?? 'a4' }}" data-page-orientation="{{ $pageSetup->orientation ?? 'portrait' }}">
     <main>
         {!! $content ?? '' !!}
     </main>
