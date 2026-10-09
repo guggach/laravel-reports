@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Guggach\Reports;
 
+use Guggach\Reports\Contracts\HtmlToPdf;
 use Guggach\Reports\Contracts\ReportRenderer;
 use Guggach\Reports\Engine\ReportEngine;
 use Guggach\Reports\Renderers\HtmlRenderer;
+use Guggach\Reports\Renderers\UnconfiguredHtmlToPdf;
 use Illuminate\Support\ServiceProvider;
 
 final class ReportsServiceProvider extends ServiceProvider
@@ -15,6 +17,7 @@ final class ReportsServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/reports.php', 'reports');
 
+        $this->app->bindIf(HtmlToPdf::class, UnconfiguredHtmlToPdf::class);
         $this->app->singleton(ReportRenderer::class, HtmlRenderer::class);
         $this->app->singleton(ReportEngine::class);
         $this->app->singleton(Reports::class);

@@ -668,6 +668,7 @@ Das Paket selbst braucht daher kein Frontend. Die Filter-UI ist ein optionaler A
 - **Meta-Zeile:** Der Aufrufer kann ein `meta`-Array (z. B. «Zeitraum», «Sortierung») mitgeben; das Layout/der Page-Header zeigt es an.
 - Optionales **Speichern/Archivieren**: Disk + Pfad aus Config; Eintrag in `report_outputs`.
 - **Display-Frame:** Der Frame um den HTML-Output (Vorschau + Buttons: PDF, Drucken, Speichern, Export) ist stack-abhängig und gehört zu den UI-Stubs (Abschnitt 11). Er kann auch komplett wegfallen, wenn das Host-System selbst einbettet.
+- **PDF (implementiert):** `Reports::pdf($report)` rendert zuerst das HTML (gleiche Pipeline/Layout) und übergibt es an den gebundenen `Contracts\HtmlToPdf`-Treiber; `Reports::store($report, $path)` schreibt die Datei. Die `PdfOptions` (Format, Orientierung, Ränder, Hintergrund) stammen aus der aufgelösten `PageSetup` – eine Quelle der Wahrheit mit `@page`. **Der Konverter wird vom Host gebunden** (z. B. spatie/laravel-pdf, Browsershot oder ein direkter Chromium-/Playwright-Aufruf); ohne Bindung fliegt eine hilfreiche Exception (`UnconfiguredHtmlToPdf`). So bleibt das Paket frei von einer harten Browser-Abhängigkeit.
 
 ---
 
@@ -922,6 +923,7 @@ laravel-reports/
 13. **Paketname / Namespace** – `guggach/laravel-reports`, `Guggach\Reports`. ✔
 14. **Mehrsprachigkeit** – Sprache pro Aufruf, Modul-`lang/`, Locale im `ReportSource`, `try/finally`-Wiederherstellung (siehe 5.6). ✔
 15. **Bänder & Erweiterung (Variante A)** – Bänder sind Konfigurationsobjekte (Normalfall `view`/`closure`), Klassen **nicht `final`**; eigene Band-Klassen werden per **Instanz-Injektion** eingehängt (z. B. Swiss QRR; siehe 6.1). ✔
+16. **PDF-Treiber** – treiberunabhängiger `HtmlToPdf`-Contract, vom Host gebunden (spatie/laravel-pdf/Browsershot/Chromium); `PdfOptions` aus der `PageSetup`. ✔
 
 **Weiterhin offen:**
 

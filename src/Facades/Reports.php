@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static string html(Report $report, array<string, mixed> $filters = [], array<string, mixed> $options = [])
  * @method static ReportDefinition definition(Report $report)
  * @method static PageSetup pageSetup(Report $report)
+ * @method static string pdf(Report $report, array<string, mixed> $filters = [], array<string, mixed> $options = [])
+ * @method static string store(Report $report, string $path, array<string, mixed> $filters = [], array<string, mixed> $options = [])
  *
  * @see ReportsManager
  */

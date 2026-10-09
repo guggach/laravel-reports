@@ -40,3 +40,13 @@ it('uses the paper width for landscape orientation', function (): void {
     expect($html)->toContain('width: 297mm')
         ->toContain('data-page-orientation="landscape"');
 });
+
+it('renders an optional pdf action', function (): void {
+    $html = view('reports::components.frame', [
+        'url' => '/report/price-list',
+        'pageSetup' => PageSetup::a4(),
+        'pdf' => '/report/price-list.pdf',
+    ])->render();
+
+    expect($html)->toContain('href="/report/price-list.pdf"');
+});

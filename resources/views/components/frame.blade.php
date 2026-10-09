@@ -2,6 +2,7 @@
     'url',
     'pageSetup',
     'title' => null,
+    'pdf' => null,
 ])
 
 @php
@@ -25,7 +26,10 @@
     <div class="report-frame__chrome">
         <span class="report-frame__title">{{ $title }}</span>
         <span class="report-frame__actions">
-            <button type="button"
+            @if ($pdf)
+                <a class="report-frame__button" href="{{ $pdf }}" target="_blank" rel="noopener">PDF</a>
+            @endif
+            <button type="button" class="report-frame__button"
                     onclick="var f=this.closest('.report-frame').querySelector('.report-frame__iframe'); f.contentWindow.focus(); f.contentWindow.print();">
                 Drucken
             </button>
@@ -47,6 +51,8 @@
 <style>
     .report-frame__chrome { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; background: #111827; color: #f9fafb; }
     .report-frame__title { font-weight: 600; }
+    .report-frame__actions { display: flex; gap: 8px; }
+    .report-frame__button { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid #4b5563; background: #1f2937; color: #f9fafb; text-decoration: none; cursor: pointer; }
     .report-frame__viewport { background: #e5e7eb; padding: 28px; display: flex; justify-content: center; }
     .report-frame__sheet { background: #fff; box-sizing: border-box; box-shadow: 0 2px 12px rgba(0, 0, 0, .28); }
     .report-frame__iframe { display: block; width: 100%; border: 0; }
