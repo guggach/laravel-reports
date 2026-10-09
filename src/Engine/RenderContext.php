@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Guggach\Reports\Engine;
 
-use ArrayAccess;
 use Guggach\Reports\Definition\ReportDefinition;
 use Guggach\Reports\Report;
+use Guggach\Reports\Support\Record;
 
 /**
  * The data context handed to every band (Blade view or closure). Accessing an
@@ -19,7 +19,7 @@ final readonly class RenderContext
 {
     /**
      * @param  array<string, mixed>  $filters
-     * @param  list<array<string, mixed>>  $groups
+     * @param  list<array{level: int, keys: list<string>, key: string}>  $groups
      * @param  array<string, mixed>  $aggregates
      * @param  array<string, mixed>  $page
      */
@@ -62,6 +62,44 @@ final readonly class RenderContext
         );
     }
 
+    /**
+     * @param  list<array{level: int, keys: list<string>, key: string}>  $groups
+     */
+    public function withGroups(array $groups): self
+    {
+        return new self(
+            report: $this->report,
+            definition: $this->definition,
+            record: $this->record,
+            index: $this->index,
+            total: $this->total,
+            filters: $this->filters,
+            locale: $this->locale,
+            groups: $groups,
+            aggregates: $this->aggregates,
+            page: $this->page,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $aggregates
+     */
+    public function withAggregates(array $aggregates): self
+    {
+        return new self(
+            report: $this->report,
+            definition: $this->definition,
+            record: $this->record,
+            index: $this->index,
+            total: $this->total,
+            filters: $this->filters,
+            locale: $this->locale,
+            groups: $this->groups,
+            aggregates: $aggregates,
+            page: $this->page,
+        );
+    }
+
     public function isFirst(): bool
     {
         return $this->index === 0;
@@ -72,22 +110,22 @@ final readonly class RenderContext
         return $this->index === $this->total - 1;
     }
 
+    /**
+     * The innermost currently open group, if any.
+     *
+     * @return array{level: int, keys: list<string>, key: string}|null
+     */
+    public function currentGroup(): ?array
+    {
+        if ($this->groups === []) {
+            return null;
+        }
+
+        return $this->groups[array_key_last($this->groups)];
+    }
+
     public function field(string $key, mixed $default = null): mixed
     {
-        $record = $this->record;
-
-        if (is_array($record)) {
-            return $record[$key] ?? $default;
-        }
-
-        if ($record instanceof ArrayAccess) {
-            return $record->offsetExists($key) ? $record[$key] : $default;
-        }
-
-        if (is_object($record)) {
-            return property_exists($record, $key) ? $record->{$key} : $default;
-        }
-
-        return $default;
+        return Record::get($this->record, $key, $default);
     }
 }

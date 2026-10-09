@@ -544,6 +544,8 @@ Die Herkunft der Daten ist **kein `if/switch` in einer Klasse**, sondern je Ursp
   2. **Top-Down (optional):** Jedes Level hat eine eigene `ReportSource` (`drivesWith()`), die aus der Elternzeile parametrisiert wird und die Schleife treibt; die tiefste Ebene liefert die Detailrecords.
 - Filter- und Sortierfelder müssen zum Allow-List der `ReportField`s gehören; Felder, die Teil einer Gruppe sind, sind nicht frei sortierbar.
 
+**Implementiert (Flow, run-basiert):** Der `FlowPaginator` erkennt Run-Wechsel je Level, emittiert Gruppenkopf/-fuss in der richtigen Reihenfolge und akkumuliert Aggregate über einen `AggregateResolver` **pro offener Gruppe und für den Report**. Die Band-Contexts erhalten `groups` (offener Stapel, inkl. `currentGroup()`) und `aggregates` (Report- + innerste Gruppenwerte). Aggregate: `Sum`, `Avg`, `Count`, `CountDistinct`, `Min`, `Max`; Report-Aggregate via `$r->aggregate('grand_total', Sum::class, field: 'price', scope: 'report')`, Gruppen-Aggregate via `$g->aggSum('price', as: 'category_total')`. Top-Down und Enrichment-Sources folgen (7.4).
+
 ### 7.3 Aggregate / virtuelle Rechenfelder
 
 ```php
