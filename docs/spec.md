@@ -670,14 +670,31 @@ Das Paket selbst braucht daher kein Frontend. Die Filter-UI ist ein optionaler A
 - **Display-Frame:** Der Frame um den HTML-Output (Vorschau + Buttons: PDF, Drucken, Speichern, Export) ist stack-abhängig und gehört zu den UI-Stubs (Abschnitt 11). Er kann auch komplett wegfallen, wenn das Host-System selbst einbettet.
 - **PDF (implementiert):** `Reports::pdf($report)` rendert zuerst das HTML (gleiche Pipeline/Layout) und übergibt es an den gebundenen `Contracts\HtmlToPdf`-Treiber; `Reports::store($report, $path)` schreibt die Datei. Die `PdfOptions` (Format, Orientierung, Ränder, Hintergrund) stammen aus der aufgelösten `PageSetup` – eine Quelle der Wahrheit mit `@page`. **Der Konverter wird vom Host gebunden** (z. B. spatie/laravel-pdf, Browsershot oder ein direkter Chromium-/Playwright-Aufruf); ohne Bindung fliegt eine hilfreiche Exception (`UnconfiguredHtmlToPdf`). So bleibt das Paket frei von einer harten Browser-Abhängigkeit.
 
+### 9.1 PDF-Treiber: Chromium vs. WeasyPrint
+
+Der `HtmlToPdf`-Contract ist treiberneutral. In Frage kommen (über `spatie/laravel-pdf` v2 oder direkt):
+
+| Treiber | Stärke | Für dieses Paket |
+|---|---|---|
+| **Chromium** (Browsershot, Chrome, Gotenberg, Cloudflare, Playwright) | **modernes CSS**: Grid, Flexbox, Tailwind; sehr nah an der Browser-Vorschau | **Default**: WYSIWYG mit der Vorschau; Grid/Flex wie in der Spec erlaubt; exakte mm-Höhen. Flow-Pagination über `break-*`, Strict über eigene `.page`-Container |
+| **WeasyPrint** (Python) | **CSS Paged Media L3 vollständig**: `@page`-Margin-Boxes, Seitenzähler (`counter(page)`/`counter(pages)`), `:first/:left/:right/:blank`, benannte Seiten, Running Headers/Footers | **Opt-in**: ideal für Flow-Reports mit echten Kopf-/Fusszeilen und Seitenzahlen ohne Chromium-Templates. Achtung: **Grid/Flex sind nicht die Stärke** – grid-lastige Layouts vorher verifizieren |
+| **DOMPDF** | reines PHP, keine Binaries | zu eingeschränkt (CSS 2.1) – nicht vorgesehen |
+
+**Konsequenz für die Spec:**
+
+- **Default bleibt Chromium**, weil (a) die Bildschirm-Vorschau (iframe) exakt dem PDF entspricht und (b) die Spec Grid/Flex ausdrücklich erlaubt.
+- **WeasyPrint ist ein gleichwertiger optionaler Treiber** über denselben Contract – besonders attraktiv, weil es die in 10.2 genannten Flow-Grenzen (wiederholte Kopf-/Fusszeilen, Seitenzähler, Seite-1-Sonderfälle) nativ löst und leichter zu deployen ist (kein Node/Chromium).
+- Der Treiber wird **pro Deployment** gewählt (Host-Binding von `HtmlToPdf`), nicht pro Report hart verdrahtet. Ein Adapter auf `spatie/laravel-pdf` würde dessen Treiberwahl (browsershot/weasyprint/gotenberg/cloudflare/dompdf/chrome) direkt nutzbar machen.
+- **Vorbehalt:** Wenn ein Report auf **CSS Grid** baut, ist Chromium die sichere Wahl; WeasyPrint nur nach Verifikation. Reine Tabellen-/Flex-Layouts laufen auf beiden.
+
 ---
 
 ## 10. Technische Basis (Chromium, Höhen, Pagination)
 
 ### 10.1 Renderer
 
-- **Ein** HTML→PDF-Renderer: Chromium (headless), Default über `spatie/laravel-pdf`, alternativ direkt Browsershot.
-- Der Entwickler darf in Blade modernes **CSS Grid/Flexbox** verwenden.
+- **Ein** HTML→PDF-Renderer hinter dem `Contracts\HtmlToPdf`-Contract (treiberneutral, siehe 9.1). **Default: Chromium** (headless) via `spatie/laravel-pdf`/Browsershot oder direkt; **WeasyPrint** ist ein gleichwertiger optionaler Treiber.
+- Der Entwickler darf in Blade modernes **CSS Grid/Flexbox** verwenden (mit Chromium garantiert; bei WeasyPrint Grid vorher verifizieren).
 - Spacing/Höhen in **mm** (bzw. konfigurierbarer Einheit) basierend auf `PageSetup`.
 
 ### 10.2 Modus *Flow* (Browser paginiert)
@@ -924,6 +941,7 @@ laravel-reports/
 14. **Mehrsprachigkeit** – Sprache pro Aufruf, Modul-`lang/`, Locale im `ReportSource`, `try/finally`-Wiederherstellung (siehe 5.6). ✔
 15. **Bänder & Erweiterung (Variante A)** – Bänder sind Konfigurationsobjekte (Normalfall `view`/`closure`), Klassen **nicht `final`**; eigene Band-Klassen werden per **Instanz-Injektion** eingehängt (z. B. Swiss QRR; siehe 6.1). ✔
 16. **PDF-Treiber** – treiberunabhängiger `HtmlToPdf`-Contract, vom Host gebunden (spatie/laravel-pdf/Browsershot/Chromium); `PdfOptions` aus der `PageSetup`. ✔
+17. **PDF-Treiber-Default** – **Chromium** als Default (WYSIWYG zur Vorschau, Grid/Flex), **WeasyPrint** als gleichwertige Option über denselben Contract; Wahl pro Deployment, nicht pro Report (siehe 9.1). ✔
 
 **Weiterhin offen:**
 
